@@ -1,0 +1,100 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WorldSlider: Generating Parallel Worlds of a Flight</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+:root{--ink:#1d2229;--muted:#5b6570;--line:#e3e6ea;--accent:#2a78d6}
+body{margin:0;padding:32px 20px 64px;background:#fff;color:var(--ink);font:16px/1.6 "Source Sans 3",system-ui,sans-serif}
+main{max-width:1000px;margin:0 auto} h1,h2,h3{font-family:"Source Serif 4",Georgia,serif;font-weight:600;line-height:1.2} h1{font-size:2rem;margin:.2em 0 .6em} h2{font-size:1.5rem;margin:2.2em 0 .5em;border-top:1px solid var(--line);padding-top:1em} h3{font-size:1.15rem;margin:1.6em 0 .4em}
+p{max-width:72ch} blockquote{margin:0 0 1em;padding:.2em 1em;border-left:3px solid var(--line);color:var(--muted);font-style:italic} hr{border:0;border-top:1px solid var(--line);margin:2em 0}
+sub{font-size:.82em;color:var(--muted);vertical-align:baseline} img,video{max-width:100%;height:auto;display:block} video.v{background:#000}
+table{border-collapse:collapse} table.t{margin:1em 0;font-variant-numeric:tabular-nums} table.t th,table.t td{padding:.35em .7em;border-bottom:1px solid var(--line);text-align:right} table.t th:first-child,table.t td:first-child{text-align:left}
+table td{vertical-align:top;padding:.3em .5em} a{color:var(--accent)} code{font-size:.9em}
+</style></head><body><main>
+<h1>WorldSlider: Generating Parallel Worlds of a Flight</h1>
+<blockquote><i>"What if you could slide into a thousand different worlds? … you're the same person, but everything else is different?"</i> — Quinn Mallory, <i>Sliders</i></blockquote>
+<p>WorldSlider generates videos that fly a prescribed trajectory through any world. This page collects the examples behind the paper, keyed to its sections — pick a card to jump to it:</p>
+<table align="center">
+<tr><td align="center" width="25%"><a href="#comparison-with-camera-controlled-video-generation"><img src="../assets/img/toc_compare.jpg" width="200"></a></td><td align="center" width="25%"><a href="#parallel-worlds-along-a-prescribed-flight"><img src="../assets/img/toc_worlds.jpg" width="200"></a></td><td align="center" width="25%"><a href="#trajectory-conditioned-branching-from-a-shared-observation"><img src="../assets/img/toc_branch.jpg" width="200"></a></td><td align="center" width="25%"><a href="#visual-diversification-for-flight-policies"><img src="../assets/img/toc_divers.jpg" width="200"></a></td></tr>
+<tr><td align="left" valign="top" width="25%"><b><a href="#comparison-with-camera-controlled-video-generation">Trajectory following vs. baselines</a></b></td><td align="left" valign="top" width="25%"><b><a href="#parallel-worlds-along-a-prescribed-flight">One maneuver, many worlds</a></b></td><td align="left" valign="top" width="25%"><b><a href="#trajectory-conditioned-branching-from-a-shared-observation">Trajectory as action</a></b></td><td align="left" valign="top" width="25%"><b><a href="#visual-diversification-for-flight-policies">Downstream: drone data augmentation</a></b></td></tr>
+<tr><td align="left" valign="top" width="25%"><sub>§4.1 · Appendix A.1</sub></td><td align="left" valign="top" width="25%"><sub>§4.2 · Appendix A.2</sub></td><td align="left" valign="top" width="25%"><sub>§4.2</sub></td><td align="left" valign="top" width="25%"><sub>§4.2 · Appendix A.3</sub></td></tr>
+<tr><td align="left" valign="top" width="25%"><sub>How closely each camera-controlled generator follows a prescribed flight, against five baselines</sub></td><td align="left" valign="top" width="25%"><sub>The same aerobatic trajectory generated in different worlds</sub></td><td align="left" valign="top" width="25%"><sub>Alternative futures from one observation: the flight acts as the action input of a world model</sub></td><td align="left" valign="top" width="25%"><sub>Multiplying gate-traversal training data for policy learning while keeping every action label valid</sub></td></tr>
+</table>
+<p align="center"><sub>Four examples of what a trajectory-preserving generator enables; the space of applications is much larger than what fits here.</sub></p>
+<p>Consider a flight through a polar research station. The same flight can be revisited under a rose-colored sky, or transferred altogether to a tropical reservoir. The illumination, geometry, and identity of the scene change, yet the flight advances, banks, and turns with the same rhythm. We study the problem of generating these <b>parallel worlds of a flight</b>: visually distinct videos that all fly one prescribed trajectory.</p>
+<img src="../assets/img/teaser.png" width="800">
+<p><i>Rows: the source flight, the shared trajectory rendered as FlightGrid, an illumination shift (world #1) and a scene transfer (world #2). Columns are synchronized timesteps. At right, the trajectory recovered from each generated video aligns with the source trajectory.</i></p>
+<p align="center"><video class="v" width="600" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/teaser.mp4" type="video/mp4"></video></p>
+<p><i>The same three worlds, moving. Each row shows the frozen first frame, the FlightGrid it follows, and the resulting video — the source flight on top, the sunset revisit and the reservoir transfer below.</i></p>
+<h2 id="comparison-with-camera-controlled-video-generation">Comparison with camera-controlled video generation</h2>
+<sub>Paper: §4.1 Flight Fidelity and Generalization · Appendix A.1 Additional Flight Comparisons</sub>
+<p>All methods are evaluated under a common protocol, with every output rescored by the same ViPE and Q-Align pipeline. On standard trajectories, translation error is comparable across the strongest methods, while rotation error already separates. On the held-out diverse flights the methods separate decisively: every baseline falls between 20° and 27° mean geodesic rotation error, whereas WorldSlider attains 6.65° at four denoising function evaluations rather than 25 or 50.</p>
+<table class="t"><tr><th>Method</th><th>Params.</th><th>NFE</th><th>Standard Rot. ↓</th><th>Standard Trans. ↓</th><th>Diverse Rot. ↓</th><th>Diverse Trans. ↓</th><th>Quality ↑</th></tr><tr><td>MotionCtrl</td><td>2B</td><td>25</td><td>11.28</td><td>0.234</td><td>27.04</td><td>0.441</td><td>3.20</td></tr><tr><td>CameraCtrl</td><td>2B</td><td>25</td><td>5.67</td><td>0.099</td><td>26.72</td><td>0.471</td><td>3.15</td></tr><tr><td>RealCam-I2V</td><td>1.4B</td><td>25</td><td>7.62</td><td>0.132</td><td>24.37</td><td>0.428</td><td>2.76</td></tr><tr><td>Wan2.1-Camera</td><td>1.3B</td><td>50</td><td>5.31</td><td>0.097</td><td>26.49</td><td>0.410</td><td>3.22</td></tr><tr><td>HY-WorldPlay</td><td>5B</td><td>4</td><td>4.11</td><td>0.152</td><td>19.93</td><td>0.378</td><td>3.53</td></tr><tr><td><b>WorldSlider</b></td><td>2B</td><td>4</td><td><b>2.52</b></td><td><b>0.079</b></td><td><b>6.65</b></td><td><b>0.101</b></td><td>3.45</td></tr></table>
+<p><i>Rotation is the mean geodesic error in degrees; translation is the mean scale-normalized trajectory error; quality is the mean Q-Align score over both splits. NFE counts denoising function evaluations. Standard: 50 RealEstate10K trajectories; Diverse: 50 TartanAir-V2 flights.</i></p>
+<h3>All six methods on the same flight</h3>
+<p>Seven examples, four from the standard split and three from the diverse-flight split. In each 2×4 panel, the first column shows the input FlightGrid (top) and the prescribed flight in black with every method's recovered trajectory (bottom); the six outputs are resampled to the same 9.3 s and play in step. Each panel is labelled with its method; the label colour, the panel border and the curve in the trajectory plot share one colour per method:</p>
+<img src="../assets/img/sw/prescribed.png"> prescribed flight &nbsp; <img src="../assets/img/sw/worldslider.png"> **WorldSlider (ours)** &nbsp; <img src="../assets/img/sw/worldplay.png"> HY-WorldPlay &nbsp; <img src="../assets/img/sw/wan.png"> Wan2.1-Cam &nbsp; <img src="../assets/img/sw/cameractrl.png"> CameraCtrl &nbsp; <img src="../assets/img/sw/motionctrl.png"> MotionCtrl &nbsp; <img src="../assets/img/sw/realcam.png"> RealCam-I2V
+<p><b>Beamed great room</b> (RealEstate10K)</p>
+<video class="v" width="800" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c1_standard_0c4c5d5f751aabf5.mp4" type="video/mp4"></video>
+<p><b>Green-door living room</b> (RealEstate10K)</p>
+<video class="v" width="800" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c1_standard_3825ed66b7ea932e.mp4" type="video/mp4"></video>
+<p><b>Brick entrance</b> (RealEstate10K)</p>
+<video class="v" width="800" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c1_standard_6771a51bf0cfce7f.mp4" type="video/mp4"></video>
+<p><b>Covered porch</b> (RealEstate10K)</p>
+<video class="v" width="800" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c1_standard_fea544b472e9abd1.mp4" type="video/mp4"></video>
+<p><b>Castle fortress</b> (TartanAir-V2)</p>
+<video class="v" width="800" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c1_diverse_CastleFortress_P000_s00735.mp4" type="video/mp4"></video>
+<p><b>Gothic island</b> (TartanAir-V2)</p>
+<video class="v" width="800" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c1_diverse_GothicIsland_P001_s01575.mp4" type="video/mp4"></video>
+<p><b>Spring forest</b> (TartanAir-V2)</p>
+<video class="v" width="800" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c1_diverse_SeasonalForestSpring_P003_s00525.mp4" type="video/mp4"></video>
+<p>Full-resolution mp4s: <a href="assets/mp4/"><code>assets/mp4/</code></a>.</p>
+<hr>
+<h2 id="parallel-worlds-along-a-prescribed-flight">Parallel worlds along a prescribed flight</h2>
+<sub>Paper: §4.2 Parallel Worlds and Applications · Appendix A.2 Parallel Worlds</sub>
+<p>The two flights below are specified as trajectories rather than extracted from recordings: a falling-leaf descent and a lazy eight. Each is rendered as FlightGrid and paired with two text conditions naming different target worlds. Between the two generated panels only the world changes; descent rate, roll and the onset of each turn are preserved, since both are conditioned on the same control.</p>
+<table class="t"><tr><th></th><th></th></tr><tr><td><img src="../assets/img/worlds_fallingleaf_traj.png" width="200"></td><td><b>Falling leaf</b> — FlightGrid · Office · Waterfront skyline<br><video class="v" width="600" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/worlds_fallingleaf.mp4" type="video/mp4"></video></td></tr><tr><td><img src="../assets/img/worlds_lazy8_traj.png" width="200"></td><td><b>Lazy eight</b> — FlightGrid · Botanical dome · Shopping boulevard<br><video class="v" width="600" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/worlds_lazy8.mp4" type="video/mp4"></video></td></tr></table>
+<h3>Further flights in three worlds each</h3>
+<p>One prescribed flight, three worlds; only the first frame and the text change. Left: the prescribed trajectory. Panels: <b>FlightGrid (input) · world 1 · world 2 · world 3</b>.</p>
+<table class="t"><tr><th></th><th></th></tr><tr><td><img src="../assets/img/c2_arc_turn_traj.png" width="200"></td><td><b>Arc turn</b> — Old town · Living room · Log cabin<br><video class="v" width="800" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c2_arc_turn.mp4" type="video/mp4"></video></td></tr><tr><td><img src="../assets/img/c2_swoop_traj.png" width="200"></td><td><b>Swoop</b> — Living room · Retro office · Sewer<br><video class="v" width="800" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c2_swoop.mp4" type="video/mp4"></video></td></tr><tr><td><img src="../assets/img/c2_wingover_traj.png" width="200"></td><td><b>Wingover</b> — Diner · Restaurant · Sewer<br><video class="v" width="800" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c2_wingover.mp4" type="video/mp4"></video></td></tr><tr><td><img src="../assets/img/c2_rise_and_reveal_traj.png" width="200"></td><td><b>Rise and reveal</b> — Restaurant · Retro office · Kitchen<br><video class="v" width="800" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c2_rise_and_reveal.mp4" type="video/mp4"></video></td></tr></table>
+<hr>
+<h2 id="trajectory-conditioned-branching-from-a-shared-observation">Trajectory-conditioned branching from a shared observation</h2>
+<sub>Paper: §4.2 Parallel Worlds and Applications</sub>
+<p>The construction inverts. Both branches below are conditioned on a single observation — the frame at left — and on two FlightGrids that diverge in heading. Each branch synthesizes a world consistent with that shared observation while revealing only the region its own trajectory traverses.</p>
+<p>Panels: <b>Shared first frame · Turn left (FlightGrid, generated) · Turn right (FlightGrid, generated)</b></p>
+<p><b>Street scene</b> — divergent headings from a single street-level observation.</p>
+<video class="v" width="1000" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/fork_traffic_seasia_street.mp4" type="video/mp4"></video>
+<p><b>Restaurant interior</b> — divergent headings from a single interior observation.</p>
+<video class="v" width="1000" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/fork_restaurant.mp4" type="video/mp4"></video>
+<hr>
+<h2 id="visual-diversification-for-flight-policies">Visual diversification for flight policies</h2>
+<sub>Paper: §4.2 Parallel Worlds and Applications · Appendix A.3 Visual Diversification</sub>
+<p>Because a parallel world preserves the trajectory that generated it, the action labels of the source flight remain valid in the synthesized video. Simulator domain randomization varies illumination, gate appearance and background; WorldSlider instead generates complete, task-consistent environments around a fixed flight, which we term <b>visual diversification</b>. In Isaac Sim we build a three-gate direct course, a three-gate loop and a four-gate direct course, and collect 20 expert trajectories per course. An imitation-learning policy maps egocentric RGB observations to short waypoint sequences executed by a low-level controller; its architecture, trajectory labels and training budget are held fixed while only the observations vary. The original condition repeats each demonstration ten times; simulator randomization and WorldSlider instead provide ten visual variants of every demonstration, so every condition trains on 200 sequences per course with identical trajectory supervision. For every condition and course, five policies are each evaluated over 20 rollouts; a rollout succeeds only if all gates are traversed without collision. WorldSlider attains the highest success rate throughout and exceeds simulator randomization by 28 percentage points on the three-gate loop course.</p>
+<img src="../assets/img/flight_policy.png" width="800">
+<p><i>(a) Gate traversal. (b) Policy success under the three training conditions. (c) Task-consistent worlds generated from the same flight.</i></p>
+<h3>Policy rollouts</h3>
+<table class="t"><tr><th>3-gate direct</th><th>3-gate loop</th><th>4-gate direct</th></tr><tr><td><video class="v" width="266" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/policy_3gate_direct.mp4" type="video/mp4"></video></td><td><video class="v" width="266" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/policy_3gate_loop.mp4" type="video/mp4"></video></td><td><video class="v" width="266" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/policy_4gate_direct.mp4" type="video/mp4"></video></td></tr></table>
+<h3>Diversified gate flights</h3>
+<p>Recorded gate flights are re-rendered in new worlds from an edited first frame while the gate geometry and the flight are preserved. Each clip shows <b>original (left) · diversified (right)</b>, frame-aligned.</p>
+<table>
+<tr><td width="50%"><b>Underground parking garage</b></td><td width="50%"><b>Container port at night</b></td></tr>
+<tr><td width="50%"><video class="v" width="400" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c3_underground_parking_garage.mp4" type="video/mp4"></video></td><td width="50%"><video class="v" width="400" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c3_container_port_at_night.mp4" type="video/mp4"></video></td></tr>
+<tr><td width="50%"><b>Spring wildflower meadow</b></td><td width="50%"><b>Rainy autumn plaza</b></td></tr>
+<tr><td width="50%"><video class="v" width="400" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c3_spring_wildflower_meadow.mp4" type="video/mp4"></video></td><td width="50%"><video class="v" width="400" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c3_rainy_autumn_plaza.mp4" type="video/mp4"></video></td></tr>
+<tr><td width="50%"><b>Tropical terrace after rain</b></td><td width="50%"><b>Snowy field under a full moon</b></td></tr>
+<tr><td width="50%"><video class="v" width="400" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c3_tropical_terrace_after_rain.mp4" type="video/mp4"></video></td><td width="50%"><video class="v" width="400" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c3_snowy_field_under_a_full_moon.mp4" type="video/mp4"></video></td></tr>
+<tr><td width="50%"><b>Aircraft hangar</b></td><td width="50%"><b>Misty bamboo forest</b></td></tr>
+<tr><td width="50%"><video class="v" width="400" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c3_aircraft_hangar.mp4" type="video/mp4"></video></td><td width="50%"><video class="v" width="400" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c3_misty_bamboo_forest.mp4" type="video/mp4"></video></td></tr>
+<tr><td width="50%"><b>Running track at night</b></td><td width="50%"><b>Cherry-blossom park</b></td></tr>
+<tr><td width="50%"><video class="v" width="400" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c3_running_track_at_night.mp4" type="video/mp4"></video></td><td width="50%"><video class="v" width="400" muted loop playsinline autoplay preload="metadata"><source src="../assets/mp4/c3_cherry_blossom_park.mp4" type="video/mp4"></video></td></tr>
+</table>
+<hr>
+<h2 id="code">Code</h2>
+<p><sub>Paper: §3 Method</sub></p>
+<p>A minimal release of the WorldSlider-specific code is in <a href="https://github.com/parallelworldsanon/WorldSlider/tree/main/code">code/</a>: the FlightGrid renderer (poses → appearance-free control video), the control-input hook for Cosmos-Transfer2.5, the three training stages (control adaptation, 4-step DMD distillation, reward-weighted DMD from recovered trajectories), the geometry reward, a dataset builder and a generation script. Rendering FlightGrid needs only NumPy, OpenCV and ffmpeg:</p>
+<pre><code>python -m worldslider.flightgrid.render poses.txt flightgrid.mp4 --fov 90 --fps 10 --frames 93</code></pre>
+</main>
+<script>
+// keep every video on the page in step: restart all together when the first one loops
+const vs=[...document.querySelectorAll("video.v")];
+const io=new IntersectionObserver(es=>es.forEach(e=>{const v=e.target; if(e.isIntersecting){v.play().catch(()=>{})} else v.pause();}),{threshold:.1});
+vs.forEach(v=>io.observe(v));
+</script></body></html>

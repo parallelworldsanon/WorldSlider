@@ -1,0 +1,7 @@
+# FlightGrid rendering and dataset preparation (CPU only)
+numpy
+opencv-python-headless
+imageio-ffmpeg
+scipy
+# training / inference: cosmos-transfer2.5 at commit 2ff49d0 (its own uv environment)
+# geometry reward: depth-anything-3 (https://github.com/ByteDance-Seed/Depth-Anything-3)

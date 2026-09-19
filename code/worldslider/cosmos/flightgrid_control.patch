@@ -1,0 +1,132 @@
+diff --git a/cosmos_transfer2/_src/interactive/configs/registry_transfer2p5.py b/cosmos_transfer2/_src/interactive/configs/registry_transfer2p5.py
+--- a/cosmos_transfer2/_src/interactive/configs/registry_transfer2p5.py
++++ b/cosmos_transfer2/_src/interactive/configs/registry_transfer2p5.py
+@@ -117,4 +117,10 @@ def make_config():
+ 
+     # experiment config are defined in the experiment folder
+     import_all_modules_from_package("cosmos_transfer2._src.interactive.configs.registry_experiment", reload=True)
++    # also load user experiments (the vid2vid config root already does this);
++    # the WorldSlider distillation configs live in cosmos_transfer2.experiments
++    try:
++        import_all_modules_from_package("cosmos_transfer2.experiments", reload=True)
++    except ModuleNotFoundError:
++        pass
+     return c
+diff --git a/cosmos_transfer2/_src/transfer2/configs/vid2vid_transfer/defaults/conditioner.py b/cosmos_transfer2/_src/transfer2/configs/vid2vid_transfer/defaults/conditioner.py
+--- a/cosmos_transfer2/_src/transfer2/configs/vid2vid_transfer/defaults/conditioner.py
++++ b/cosmos_transfer2/_src/transfer2/configs/vid2vid_transfer/defaults/conditioner.py
+@@ -50,6 +50,8 @@ class ControlVideo2WorldCondition(Video2WorldCondition):
+     control_input_seg_mask: Optional[torch.Tensor] = None
+     control_input_inpaint_mask: Optional[torch.Tensor] = None
+     control_input_hdmap_bbox: Optional[torch.Tensor] = None
++    control_input_flightgrid: Optional[torch.Tensor] = None  # FlightGrid control input
++    control_input_flightgrid_mask: Optional[torch.Tensor] = None
+     latent_control_input: Optional[torch.Tensor] = None
+     control_context_scale: Optional[float] = 1.0
+ 
+@@ -342,6 +344,19 @@ _SHARED_CONFIG = dict(
+         dropout_rate=0.0,
+         dtype=None,
+     ),
++    # FlightGrid control input, passed through unchanged like depth
++    control_input_flightgrid=L(ReMapkey)(
++        input_key="control_input_flightgrid",
++        output_key="control_input_flightgrid",
++        dropout_rate=0.0,
++        dtype=None,
++    ),
++    control_input_flightgrid_mask=L(ReMapkey)(
++        input_key="control_input_flightgrid_mask",
++        output_key="control_input_flightgrid_mask",
++        dropout_rate=0.0,
++        dtype=None,
++    ),
+ )
+ 
+ _SHARED_CONFIG_AV = copy.deepcopy(_SHARED_CONFIG)
+diff --git a/cosmos_transfer2/_src/transfer2/datasets/augmentors/control_input.py b/cosmos_transfer2/_src/transfer2/datasets/augmentors/control_input.py
+--- a/cosmos_transfer2/_src/transfer2/datasets/augmentors/control_input.py
++++ b/cosmos_transfer2/_src/transfer2/datasets/augmentors/control_input.py
+@@ -288,6 +288,43 @@ class AddControlInputDepth(Augmentor):
+         return data_dict
+ 
+ 
++class AddControlInputFlightgrid(Augmentor):
++    """FlightGrid control input: a pre-rendered control video (see
++    worldslider/flightgrid/render.py), resized to the RGB frame size and
++    otherwise passed through unchanged. The colours of the line art carry
++    meaning (red = ground, blue = ceiling, white = flight trace), so no
++    recolouring or masking is applied here, unlike the segmentation input.
++    Registered in CTRL_HINT_KEYS below and in configs/.../conditioner.py.
++    """
++
++    def __init__(
++        self,
++        input_keys: list,
++        output_keys: Optional[list] = ["control_input_flightgrid"],
++        args: Optional[dict] = None,
++        **kwargs,
++    ) -> None:
++        super().__init__(input_keys, output_keys, args)
++
++    def __call__(self, data_dict: dict) -> dict:
++        if "control_input_flightgrid" in data_dict:
++            # already processed
++            return data_dict
++
++        key_out = self.output_keys[0]
++        flightgrid = data_dict["flightgrid"]
++
++        frames = data_dict["video"]
++        _, T, H, W = frames.shape
++        flightgrid = transforms_F.resize(
++            flightgrid,
++            size=(H, W),
++            interpolation=transforms_F.InterpolationMode.BILINEAR,
++        )
++        data_dict[key_out] = flightgrid
++        return data_dict
++
++
+ class AddControlInputSeg(Augmentor):
+     """
+     Add control input to the data dictionary. control input are expanded to 3-channels
+@@ -541,6 +578,7 @@ CTRL_HINT_KEYS = {
+     "control_input_seg": AddControlInputSeg,
+     "control_input_inpaint": AddControlInputIdentity,
+     "control_input_hdmap_bbox": AddControlInputHdmapBbox,
++    "control_input_flightgrid": AddControlInputFlightgrid,  # FlightGrid control input
+ }
+ 
+ 
+diff --git a/cosmos_transfer2/_src/transfer2/datasets/local_datasets/singleview_dataset.py b/cosmos_transfer2/_src/transfer2/datasets/local_datasets/singleview_dataset.py
+--- a/cosmos_transfer2/_src/transfer2/datasets/local_datasets/singleview_dataset.py
++++ b/cosmos_transfer2/_src/transfer2/datasets/local_datasets/singleview_dataset.py
+@@ -81,6 +81,9 @@ CTRL_TYPE_INFO = {
+     "seg": {"folder": "seg", "format": "mp4", "data_dict_key": "segmentation"},
+     "edge": {"folder": None},  # Canny edge, computed on-the-fly by augmentor
+     "vis": {"folder": None},  # Blur, computed on-the-fly by augmentor
++    # FlightGrid: pre-rendered control video loaded from the dataset's
++    # flightgrid/ folder, handled like depth
++    "flightgrid": {"folder": "flightgrid", "format": "mp4", "data_dict_key": "flightgrid"},
+ }
+ 
+ 
+@@ -363,6 +366,17 @@ class SingleViewTransferDataset(Dataset):
+                     keypoint_data = pickle.load(f)
+                 data_dict["keypoint"] = keypoint_data
+ 
++            elif self.ctrl_type == "flightgrid":
++                # Load FlightGrid control video (same handling as depth: mp4 -> uint8 CTHW)
++                vr = VideoReader(ctrl_path, ctx=cpu(0))
++                if len(vr) < frame_ids[-1] + 1:
++                    raise ValueError(f"FlightGrid video has fewer frames than RGB video: {ctrl_path}")
++
++                fg_frames = vr.get_batch(frame_ids).asnumpy().astype(np.uint8)  # [T, H, W, C]
++                fg_t = torch.from_numpy(fg_frames).permute(0, 3, 1, 2)  # (T, C, H, W)
++                data_dict["flightgrid"] = fg_t.permute(1, 0, 2, 3)  # (C, T, H, W) uint8
++                del vr
++
+             elif self.ctrl_type == "depth":
+                 # Load depth video
+                 vr = VideoReader(ctrl_path, ctx=cpu(0))
