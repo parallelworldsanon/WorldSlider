@@ -1,10 +1,10 @@
 # WorldSlider: Generating Parallel Worlds of a Flight
 
+> *"What if you could slide into a thousand different worlds? … you're the same person, but everything else is different?"* — Quinn Mallory, *Sliders*
+
 <p align="center">
   <img src="assets/img/worldslider-icon.png" width="200" height="200" alt="WorldSlider — a drone flying through a green portal">
 </p>
-
-> *"What if you could slide into a thousand different worlds? … you're the same person, but everything else is different?"* — Quinn Mallory, *Sliders*
 
 WorldSlider generates videos that fly a prescribed trajectory through any world. This page collects the examples behind the paper, keyed to its sections — pick a card to jump to it:
 
